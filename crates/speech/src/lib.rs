@@ -16,10 +16,13 @@
 
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable))]
 
+pub mod catalog;
 pub mod device;
 pub mod diarize;
 pub mod mel;
 pub mod models;
+#[cfg(feature = "download")]
+pub mod remote;
 pub mod vad;
 #[cfg(feature = "whisper")]
 pub mod whisper;
@@ -131,7 +134,48 @@ pub fn load(models_dir: &std::path::Path, id: &str) -> Result<std::sync::Arc<dyn
     load_on(models_dir, id, DeviceChoice::from_env())
 }
 
-/// [`load`] on the processor `device` names.
+/// Whether `id` is a speech model here: built in, or in a catalogue file under `models_dir`.
+pub fn known(models_dir: &std::path::Path, id: &str) -> bool {
+    models::find(id).is_some() || matches!(catalog::find(models_dir, id), Ok(Some(_)))
+}
+
+/// Load speech model `id`: a catalogue file's entry (a Whisper folder or an endpoint) when one
+/// lists it, else the built-in model. The processor: `device`, else the catalogue entry's, else
+/// `FILMCRAFT_DEVICE`, else auto.
+pub fn load_with(models_dir: &std::path::Path, id: &str, device: Option<DeviceChoice>) -> Result<std::sync::Arc<dyn Transcriber>, SpeechError> {
+    let Some(m) = catalog::find(models_dir, id)? else {
+        return load_on(models_dir, id, device.unwrap_or_else(DeviceChoice::from_env));
+    };
+    let device = device.or(m.device).unwrap_or_else(DeviceChoice::from_env);
+    match m.source {
+        catalog::Source::Folder(dir) => {
+            #[cfg(feature = "whisper")]
+            {
+                Ok(std::sync::Arc::new(whisper::Whisper::load_on(&dir, &m.id, device)?))
+            }
+            #[cfg(not(feature = "whisper"))]
+            {
+                let _ = (dir, device);
+                Err(SpeechError::Unavailable("built without the `whisper` feature".into()))
+            }
+        }
+        catalog::Source::Endpoint { endpoint, model, token_env } => {
+            let _ = device; // the server's hardware
+            #[cfg(feature = "download")]
+            {
+                let token = std::env::var(&token_env).ok().filter(|t| !t.is_empty());
+                Ok(std::sync::Arc::new(remote::Remote { id: m.id, endpoint, model, token }))
+            }
+            #[cfg(not(feature = "download"))]
+            {
+                let _ = (endpoint, model, token_env);
+                Err(SpeechError::Unavailable("built without the `download` feature (no HTTP client)".into()))
+            }
+        }
+    }
+}
+
+/// [`load`] on the processor `device` names (built-in models only).
 pub fn load_on(models_dir: &std::path::Path, id: &str, device: DeviceChoice) -> Result<std::sync::Arc<dyn Transcriber>, SpeechError> {
     let m = models::find(id).ok_or_else(|| SpeechError::UnknownModel(id.into()))?;
     if !models::installed(models_dir, m) {

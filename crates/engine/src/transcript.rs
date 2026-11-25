@@ -139,19 +139,19 @@ fn transcriber(s: &Session, p: &Value) -> Result<Arc<dyn Transcriber>> {
     }
     // Settings ▸ Media Analysis & Transcription ▸ Speech model
     let model = str_p(p, "model").unwrap_or(&s.prefs.media_analysis.whisper_model);
-    if filmcraft_speech::models::find(model).is_none() {
+    let dir = models_dir().ok_or_else(|| EngineError::Other("no data directory for speech models".into()))?;
+    // Built in, or in a model catalogue (<models dir>/catalog.json, FILMCRAFT_CATALOG): a
+    // Whisper folder or an OpenAI-compatible endpoint.
+    if !filmcraft_speech::known(&dir, model) {
         return Err(speech_err(SpeechError::UnknownModel(model.into())));
     }
-    if !filmcraft_speech::available() {
+    if filmcraft_speech::models::find(model).is_some() && !filmcraft_speech::available() {
         return Err(EngineError::Other(NO_SPEECH.into()));
     }
-    // `device`: auto | cpu | gpu | cuda[:N] | metal[:N]; else FILMCRAFT_DEVICE, else auto.
-    let device = match str_p(p, "device") {
-        Some(d) => d.parse::<filmcraft_speech::DeviceChoice>().map_err(|e| bad("transcript.generate", &e))?,
-        None => filmcraft_speech::DeviceChoice::from_env(),
-    };
-    let dir = models_dir().ok_or_else(|| EngineError::Other("no data directory for speech models".into()))?;
-    filmcraft_speech::load_on(&dir, model, device).map_err(speech_err)
+    // `device`: auto | cpu | gpu | cuda[:N] | metal[:N]; else the catalogue entry's, else
+    // FILMCRAFT_DEVICE, else auto.
+    let device = str_p(p, "device").map(|d| d.parse::<filmcraft_speech::DeviceChoice>()).transpose().map_err(|e| bad("transcript.generate", e))?;
+    filmcraft_speech::load_with(&dir, model, device).map_err(speech_err)
 }
 
 fn generate(s: &mut Session, p: &Value) -> Result<Value> {
@@ -442,15 +442,23 @@ fn create_captions(s: &mut Session, p: &Value) -> Result<Value> {
 
 fn models(_: &mut Session, _: &Value) -> Result<Value> {
     let dir = models_dir();
+    let catalogue = match &dir {
+        Some(d) => filmcraft_speech::catalog::load(&filmcraft_speech::catalog::default_files(d)).map_err(speech_err)?,
+        None => Vec::new(),
+    };
     Ok(json!({
         "available": filmcraft_speech::available(),
         "default": filmcraft_speech::models::DEFAULT_MODEL,
         "dir": dir.as_ref().map(|d| d.to_string_lossy().to_string()),
         "models": filmcraft_speech::models::catalogue().iter().map(|m| json!({
-            "id": m.id, "name": m.name, "multilingual": m.multilingual, "description": m.description,
+            "id": m.id, "name": m.name, "kind": "download", "multilingual": m.multilingual, "description": m.description,
             "license": m.license, "source": m.source, "size": m.size(),
             "installed": dir.as_ref().is_some_and(|d| filmcraft_speech::models::installed(d, m)),
+        })).chain(catalogue.into_iter().map(|m| match &m.source {
+            filmcraft_speech::catalog::Source::Folder(f) => json!({"id": m.id, "name": m.name, "kind": "folder", "dir": f, "installed": f.join("model.safetensors").is_file(), "device": m.device.map(|d| d.to_string()), "from": m.origin}),
+            filmcraft_speech::catalog::Source::Endpoint { endpoint, model, .. } => json!({"id": m.id, "name": m.name, "kind": "endpoint", "endpoint": endpoint, "remote_model": model, "installed": true, "from": m.origin}),
         })).collect::<Vec<_>>(),
+        "backends": filmcraft_speech::device::compiled_backends(),
     }))
 }
 

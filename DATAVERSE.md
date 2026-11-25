@@ -39,3 +39,11 @@ them. Our build is called `dataverse-film-cli` and is described as "based on Fil
 `whisper-small`, `whisper-large-v3-turbo`) and `device` (`auto`, `cpu`, `gpu`, `cuda[:N]`, `metal[:N]`);
 a server sets its default device with `FILMCRAFT_DEVICE`. The result says what ran it (`"device"`).
 CI builds `dataverse-film-cli-linux-x86_64` (CPU) and `dataverse-film-cli-linux-x86_64-cuda` (NVIDIA GPUs).
+
+## Any speech model (the model catalogue)
+
+Speech models beyond the built-in Whisper list come from catalogue files (`<FILMCRAFT_MODELS>/catalog.json`,
+`FILMCRAFT_CATALOG`), the same files craft-ai reads: entries with `"task": "speech-to-text"` and either
+`dir` (a Whisper folder in the Hugging Face layout, run here on CPU or GPU) or `endpoint` + `remote_model`
+(any OpenAI-compatible `/audio/transcriptions` server; key from `token_env`, default
+`FILMCRAFT_SPEECH_TOKEN`). `transcript.models` lists them; `transcript.generate` takes their ids.
