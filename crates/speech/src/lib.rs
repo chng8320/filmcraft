@@ -16,6 +16,7 @@
 
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable))]
 
+pub mod device;
 pub mod diarize;
 pub mod mel;
 pub mod models;
@@ -92,6 +93,10 @@ pub trait Transcriber: Send + Sync {
     fn id(&self) -> String;
     /// Transcribe mono 16 kHz `audio`. Word times are relative to the first sample.
     fn transcribe(&self, audio: &[f32], opts: &Options, progress: ProgressFn) -> Result<Transcript, SpeechError>;
+    /// What the model runs on (`"CPU"`, `"NVIDIA GPU 0 (CUDA)"`), for results and the status line.
+    fn device(&self) -> String {
+        "CPU".into()
+    }
 }
 
 /// A transcriber that returns a fixed transcript (tests, demos and agents that bring their own
@@ -118,18 +123,27 @@ impl Transcriber for FixedTranscriber {
     }
 }
 
-/// Load the transcriber for catalogue model `id` from `models_dir` (feature `whisper`).
+pub use device::DeviceChoice;
+
+/// Load the transcriber for catalogue model `id` from `models_dir` (feature `whisper`), on the
+/// processor `FILMCRAFT_DEVICE` names (default `auto`).
 pub fn load(models_dir: &std::path::Path, id: &str) -> Result<std::sync::Arc<dyn Transcriber>, SpeechError> {
+    load_on(models_dir, id, DeviceChoice::from_env())
+}
+
+/// [`load`] on the processor `device` names.
+pub fn load_on(models_dir: &std::path::Path, id: &str, device: DeviceChoice) -> Result<std::sync::Arc<dyn Transcriber>, SpeechError> {
     let m = models::find(id).ok_or_else(|| SpeechError::UnknownModel(id.into()))?;
     if !models::installed(models_dir, m) {
         return Err(SpeechError::NotInstalled(id.into()));
     }
     #[cfg(feature = "whisper")]
     {
-        Ok(std::sync::Arc::new(whisper::Whisper::load(&models::model_dir(models_dir, m), m.id)?))
+        Ok(std::sync::Arc::new(whisper::Whisper::load_on(&models::model_dir(models_dir, m), m.id, device)?))
     }
     #[cfg(not(feature = "whisper"))]
     {
+        let _ = device;
         Err(SpeechError::Unavailable("built without the `whisper` feature".into()))
     }
 }

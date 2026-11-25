@@ -66,7 +66,7 @@ jobs:
       - name: Build the command line
         run: cargo build --release -p filmcraft-cli --features whisper,neural-voices
       - name: Test it
-        run: cargo test --release -p filmcraft-cli --features whisper,neural-voices --test it && cargo test --release -p filmcraft-stream
+        run: cargo test --release -p filmcraft-cli --features whisper,neural-voices --test it && cargo test --release -p filmcraft-stream && cargo test --release -p filmcraft-speech --features whisper --lib
       - name: Name it for the Dataverse
         run: |
           mkdir -p out
@@ -77,4 +77,35 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: dataverse-film-cli-linux-x86_64
+          path: out/
+
+  # The same command line with Whisper on NVIDIA GPUs. The runner has no GPU: this builds it, the
+  # GPU worker image runs it. Kernels target compute capability 7.5 (T4) and newer.
+  build-cuda:
+    needs: sync
+    if: needs.sync.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    container: nvidia/cuda:12.6.3-devel-ubuntu24.04
+    env:
+      CUDA_COMPUTE_CAP: "75"
+    steps:
+      - name: Tools and system libraries
+        run: apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates build-essential pkg-config libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libxcursor-dev libxrandr-dev libxi-dev libfontconfig1-dev libfreetype-dev libasound2-dev libvulkan1
+      - uses: actions/checkout@v4
+        with:
+          ref: dataverse
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the command line with CUDA
+        run: cargo build --release -p filmcraft-cli --features cuda,neural-voices
+      - name: Name it for the Dataverse
+        run: |
+          mkdir -p out
+          cp target/release/filmcraft-cli out/dataverse-film-cli
+          git config --global --add safe.directory "$PWD"
+          git rev-parse HEAD > out/VERSION.txt
+          cp LICENSE-MIT LICENSE-APACHE NOTICE DATAVERSE.md out/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dataverse-film-cli-linux-x86_64-cuda
           path: out/

@@ -59,12 +59,20 @@ pub struct Whisper {
     alignment_heads: Vec<(usize, usize)>,
     suppress: Vec<u32>,
     begin_suppress: Vec<u32>,
+    /// What the model runs on.
+    on: String,
 }
 
 impl Whisper {
     /// Load a model directory (`config.json`, `generation_config.json`, `tokenizer.json`,
     /// `model.safetensors`).
     pub fn load(dir: &Path, id: &str) -> Result<Self, SpeechError> {
+        Self::load_on(dir, id, crate::DeviceChoice::Cpu)
+    }
+
+    /// [`Self::load`] on the processor `device` names.
+    pub fn load_on(dir: &Path, id: &str, device: crate::DeviceChoice) -> Result<Self, SpeechError> {
+        let (device, on) = crate::device::open(device)?;
         let read = |n: &str| std::fs::read(dir.join(n)).map_err(|e| SpeechError::Model(format!("{}: {e}", dir.join(n).display())));
         let cfg: Config = serde_json::from_slice(&read("config.json")?).map_err(|e| SpeechError::Model(format!("config.json: {e}")))?;
         let gen_cfg: serde_json::Value = serde_json::from_slice(&read("generation_config.json")?).unwrap_or_default();
@@ -80,8 +88,8 @@ impl Whisper {
             .as_array()
             .map(|a| a.iter().filter_map(|x| x.as_u64().map(|v| v as u32)).collect())
             .unwrap_or_else(|| vec![220, tok.eot]);
-        let model = Model::load(cfg, weights).map_err(merr)?;
-        Ok(Self { id: id.to_string(), model: Mutex::new(model), tok, alignment_heads, suppress, begin_suppress })
+        let model = Model::load(cfg, weights, &device).map_err(merr)?;
+        Ok(Self { id: id.to_string(), model: Mutex::new(model), tok, alignment_heads, suppress, begin_suppress, on })
     }
 
     pub fn languages(&self) -> Vec<String> {
@@ -262,6 +270,10 @@ fn repeating(seq: &[u32], tb: u32) -> bool {
 impl Transcriber for Whisper {
     fn id(&self) -> String {
         self.id.clone()
+    }
+
+    fn device(&self) -> String {
+        self.on.clone()
     }
 
     fn transcribe(&self, audio: &[f32], opts: &Options, progress: ProgressFn) -> Result<Transcript, SpeechError> {

@@ -50,12 +50,14 @@ const LICENSE_URL: &str = "https://github.com/openai/whisper/blob/main/LICENSE";
 const AUTHOR: &str = "OpenAI";
 
 macro_rules! hf {
-    ($repo:literal, $rev:literal, $name:literal, $sha:literal, $size:expr) => {
+    ($repo:literal, $rev:literal, $name:literal, $sha:expr, $size:expr) => {
         ModelFile { name: $name, url: concat!("https://huggingface.co/openai/", $repo, "/resolve/", $rev, "/", $name), sha256: $sha, size: $size }
     };
 }
 
 const TOKENIZER_MULTI: &str = "27fc476bfe7f17299480be2273fc0608e4d5a99aba2ab5dec5374b4482d1a566";
+/// The large-v3 models have one more language token (Cantonese), so their own tokenizer.
+const TOKENIZER_V3: &str = "297b13372ac43916285644fb9687add3cc62ee2a1adb60da3dc25cc94c1871fd";
 
 static CATALOGUE: &[ModelInfo] = &[
     ModelInfo {
@@ -175,6 +177,40 @@ static CATALOGUE: &[ModelInfo] = &[
                 "model.safetensors",
                 "1d7734884874f1a1513ed9aa760a4f8e97aaa02fd6d93a3a85d27b2ae9ca596b",
                 966995080
+            ),
+        ],
+    },
+    ModelInfo {
+        id: "whisper-large-v3-turbo",
+        name: "Whisper large-v3 turbo (multilingual)",
+        multilingual: true,
+        description: "809 M parameters. Close to Whisper large-v3, much faster; best on a GPU, slow on a CPU.",
+        license: LICENSE,
+        license_url: LICENSE_URL,
+        author: AUTHOR,
+        source: "https://huggingface.co/openai/whisper-large-v3-turbo",
+        files: &[
+            hf!(
+                "whisper-large-v3-turbo",
+                "41f01f3fe87f28c78e2fbf8b568835947dd65ed9",
+                "config.json",
+                "c5b526b3e3cd64cd8940dabb45e8ba726629e22d8ed389c29b552f9140daf04a",
+                1256
+            ),
+            hf!(
+                "whisper-large-v3-turbo",
+                "41f01f3fe87f28c78e2fbf8b568835947dd65ed9",
+                "generation_config.json",
+                "cce11bfe3aaa6ae9e072ea2637caaec8795e68d9b67e655a5af16ee509681a4c",
+                3772
+            ),
+            hf!("whisper-large-v3-turbo", "41f01f3fe87f28c78e2fbf8b568835947dd65ed9", "tokenizer.json", TOKENIZER_V3, 2710337),
+            hf!(
+                "whisper-large-v3-turbo",
+                "41f01f3fe87f28c78e2fbf8b568835947dd65ed9",
+                "model.safetensors",
+                "542566a422ae4f3fd23f1ba11add198fca01bbf82e66e6a2857b3f608b1eb9d1",
+                1617824864
             ),
         ],
     },
@@ -331,7 +367,8 @@ mod tests {
                 assert_eq!(f.sha256.len(), 64);
                 assert!(f.sha256.bytes().all(|b| b.is_ascii_hexdigit()));
                 if f.name == "tokenizer.json" {
-                    assert_eq!(f.sha256, shared_tokenizer_sha());
+                    let expected = if m.id.contains("large-v3") { TOKENIZER_V3 } else { shared_tokenizer_sha() };
+                    assert_eq!(f.sha256, expected, "{}", m.id);
                 }
             }
         }

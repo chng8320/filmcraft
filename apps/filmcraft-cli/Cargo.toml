@@ -16,6 +16,9 @@ path = "src/main.rs"
 default = []
 # Speech-to-text (Text panel ▸ Transcribe) with Whisper on the CPU, and model downloads.
 whisper = ["filmcraft-engine/whisper", "filmcraft-engine/speech-download"]
+# Whisper on an NVIDIA GPU (CUDA toolkit to build) or an Apple GPU; `"device"` picks it.
+cuda = ["whisper", "filmcraft-engine/cuda"]
+metal = ["whisper", "filmcraft-engine/metal"]
 # Spoken narration (text to speech) with the neural voices, and their downloads.
 neural-voices = ["filmcraft-engine/neural-voices"]
 

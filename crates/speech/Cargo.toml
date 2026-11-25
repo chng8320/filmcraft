@@ -14,6 +14,9 @@ default = []
 # Whisper inference on the CPU via candle (pure Rust). Off by default (and in wasm builds).
 whisper = ["dep:candle-core", "dep:candle-nn"]
 # Model downloads over HTTPS (pure-Rust TLS: rustls + RustCrypto, OS certificate verification).
+# Whisper on an NVIDIA GPU (CUDA toolkit to build, NVIDIA driver to run) or an Apple GPU.
+cuda = ["whisper", "candle-core/cuda", "candle-nn/cuda"]
+metal = ["whisper", "candle-core/metal", "candle-nn/metal"]
 download = ["dep:ureq", "dep:rustls", "dep:rustls-rustcrypto"]
 
 [dependencies]

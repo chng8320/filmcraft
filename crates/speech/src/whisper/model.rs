@@ -271,8 +271,8 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn load(cfg: Config, weights: Vec<u8>) -> Result<Self> {
-        let device = Device::Cpu;
+    pub fn load(cfg: Config, weights: Vec<u8>, device: &Device) -> Result<Self> {
+        let device = device.clone();
         let vb = VarBuilder::from_buffered_safetensors(weights, DType::F32, &device)?;
         let vb = vb.pp("model");
         Ok(Self { encoder: Encoder::new(&cfg, vb.pp("encoder"))?, decoder: Decoder::new(&cfg, vb.pp("decoder"))?, cfg, device })

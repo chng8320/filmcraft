@@ -32,3 +32,10 @@ command line, runs its tests and attaches the program as `dataverse-film-cli` (L
 
 The ArtCraft name and logos are trademarks, not covered by the code licence; modified versions must not use
 them. Our build is called `dataverse-film-cli` and is described as "based on FilmCraft by the ArtCraft team".
+
+## Speech models and devices
+
+`transcript.generate` (and the sequence transcription command) take `model` (`whisper-tiny`, `whisper-base`,
+`whisper-small`, `whisper-large-v3-turbo`) and `device` (`auto`, `cpu`, `gpu`, `cuda[:N]`, `metal[:N]`);
+a server sets its default device with `FILMCRAFT_DEVICE`. The result says what ran it (`"device"`).
+CI builds `dataverse-film-cli-linux-x86_64` (CPU) and `dataverse-film-cli-linux-x86_64-cuda` (NVIDIA GPUs).
