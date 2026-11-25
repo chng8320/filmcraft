@@ -68,6 +68,10 @@ USAGE
   filmcraft-cli [OPTIONS] <SUBCOMMAND> [ARGS]
 
 SUBCOMMANDS
+  stream --chain <file|json> --width W --height H [--fps N] [--control FIFO] | --list
+                                live video: raw RGBA frames on stdin through a chain of video
+                                effects ([{\"id\": ID, \"params\": {...}}, ...]) to stdout;
+                                --control: JSON lines that change parameters while it runs
   exec <id> [key=value ...]     run one command; prints its result as JSON
   exec <id> '<json params>'     same, params as one JSON object
   run <script.jsonl | ->        run commands, one {\"id\",\"params\"} per line (# comments ok), in
@@ -345,6 +349,7 @@ async fn cli() {
         "export" => cli_export(&a).await,
         "render" => cli_render(&a).await,
         "mcp" => cli_mcp(&a).await,
+        "stream" => cli_stream(&a),
         other => usage(format!("unknown subcommand `{other}`")),
     }
 }
@@ -817,5 +822,24 @@ mod format_tests {
         assert_eq!(super::format_for("out/clip.MXF"), Some("mxf-op1a"));
         assert_eq!(super::format_for("a.mov"), Some("prores"));
         assert_eq!(super::format_for("noext"), None);
+    }
+}
+
+/// `stream`: FilmCraft's video effects on a live stream (crates/stream).
+fn cli_stream(a: &Args) {
+    if a.flag("--list") {
+        outln!("{}", filmcraft_stream::list_json());
+        return;
+    }
+    let chain = a.opt("--chain").unwrap_or_else(|| usage("stream --chain <file|json> --width W --height H (stream --list: the effects)"));
+    let dim = |k: &str| -> u32 { a.opt(k).and_then(|v| v.parse().ok()).unwrap_or_else(|| usage(format!("stream needs {k} (a whole number of pixels)"))) };
+    let fps = a.opt("--fps").map(|v| v.parse::<f64>().unwrap_or_else(|_| usage("--fps: a number"))).unwrap_or(30.0);
+    let opts = filmcraft_stream::ServeOptions {
+        chain: chain.to_string(),
+        config: filmcraft_stream::StreamConfig { width: dim("--width"), height: dim("--height"), fps },
+        control: a.opt("--control").map(str::to_string),
+    };
+    if let Err(e) = filmcraft_stream::serve(&opts, &mut std::io::stderr()) {
+        fail(e);
     }
 }

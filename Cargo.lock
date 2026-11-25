@@ -2357,6 +2357,7 @@ dependencies = [
  "filmcraft-platform",
  "filmcraft-project",
  "filmcraft-render",
+ "filmcraft-stream",
  "filmcraft-testkit",
  "filmcraft-time",
  "serde_json",
@@ -2719,6 +2720,20 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "ureq",
+]
+
+[[package]]
+name = "filmcraft-stream"
+version = "0.20.1"
+dependencies = [
+ "filmcraft-color",
+ "filmcraft-geom",
+ "filmcraft-project",
+ "filmcraft-render",
+ "filmcraft-time",
+ "log",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -27,6 +27,7 @@ filmcraft-render = { workspace = true }
 filmcraft-time = { workspace = true }
 filmcraft-gpu = { workspace = true }
 filmcraft-media = { workspace = true }
+filmcraft-stream = { workspace = true }
 filmcraft-codecs = { workspace = true }
 filmcraft-platform = { workspace = true }
 craft-media = { workspace = true, features = ["mpegts", "mxf", "ogg"] }

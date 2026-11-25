@@ -25,7 +25,8 @@ command line, runs its tests and attaches the program as `dataverse-film-cli` (L
 
 | Commit | What | Offered upstream? |
 |---|---|---|
-| (none yet) | | |
+| stream mode | `crates/stream` + `filmcraft-cli stream`: a chain of video effects (colour grading, looks, blurs, keys…) on live raw RGBA video, live parameter changes over a control FIFO | not yet |
+| speech on the server | `FILMCRAFT_MODELS`, and the command line built with `whisper` and `neural-voices` | not yet |
 
 ## Name
 

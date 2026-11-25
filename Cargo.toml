@@ -38,6 +38,7 @@ filmcraft-speech = { path = "crates/speech" }
 filmcraft-tts = { path = "crates/tts" }
 filmcraft-tts-text = { path = "crates/tts-text" }
 filmcraft-render = { path = "crates/render" }
+filmcraft-stream = { path = "crates/stream" }
 filmcraft-gpu = { path = "crates/gpu" }
 filmcraft-scopes = { path = "crates/scopes" }
 filmcraft-export = { path = "crates/export" }
