@@ -57,3 +57,9 @@ The moved tests (Whisper end to end, diarization, word tightening, catalogue, en
 Settings are craft-ai's: `CRAFT_AI_DEVICE` (was `FILMCRAFT_DEVICE`), `CRAFT_AI_CATALOG` (was
 `FILMCRAFT_CATALOG`), `CRAFT_AI_TOKEN` for endpoints (was `FILMCRAFT_SPEECH_TOKEN`); models stay in
 `FILMCRAFT_MODELS`.
+
+## Live mode
+
+`filmcraft-cli live --chain CHAIN --in URL --out URL --width W --height H [--fps N] [--control tcp:PORT|FIFO]`:
+FilmCraft's video effects on a live stream end to end through craft-live (FFmpeg), the input's audio carried,
+the same as EffectCraft's live mode. Live captions are craft-ai's (`craft-ai-cli live`).

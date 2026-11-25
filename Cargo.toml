@@ -42,6 +42,7 @@ filmcraft-tts = { path = "crates/tts" }
 filmcraft-tts-text = { path = "crates/tts-text" }
 filmcraft-render = { path = "crates/render" }
 filmcraft-stream = { path = "crates/stream" }
+craft-live = { git = "https://github.com/chng8320/craft-libs", rev = "ec3d11034d449c1e6229e1a75a40dfb60beb3728", default-features = false }
 filmcraft-gpu = { path = "crates/gpu" }
 filmcraft-scopes = { path = "crates/scopes" }
 filmcraft-export = { path = "crates/export" }

@@ -65,6 +65,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libxcursor-dev libxrandr-dev libxi-dev libfontconfig1-dev libfreetype-dev mesa-vulkan-drivers libasound2-dev libvulkan1
       - name: Build the command line
         run: cargo build --release -p filmcraft-cli --features whisper,neural-voices
+      - name: FFmpeg (live mode's input and output; its test runs it)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Test it
         run: cargo test --release -p filmcraft-cli --features whisper,neural-voices --test it && cargo test --release -p filmcraft-stream && cargo test --release -p filmcraft-speech --features whisper --lib
       - name: Name it for the Dataverse

@@ -28,6 +28,9 @@ const VALUED: &[&str] = &[
     "--height",
     "--fps",
     "--control",
+    "--in",
+    "--in-format",
+    "--video-bitrate",
 ];
 
 #[derive(Debug, Default)]

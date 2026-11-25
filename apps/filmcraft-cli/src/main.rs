@@ -72,6 +72,10 @@ SUBCOMMANDS
                                 live video: raw RGBA frames on stdin through a chain of video
                                 effects ([{\"id\": ID, \"params\": {...}}, ...]) to stdout;
                                 --control: JSON lines that change parameters while it runs
+  live --chain <file|json> --in URL|DEVICE|FILE [--in-format F] --out URL|FILE --width W --height H [--fps N]
+       [--control tcp:PORT|FIFO] [--seconds N] [--no-audio] [--video-bitrate KBPS]
+                                the same effects from a live input (a URL, a device or a file) to
+                                a live output, through FFmpeg, the input's audio carried
   exec <id> [key=value ...]     run one command; prints its result as JSON
   exec <id> '<json params>'     same, params as one JSON object
   run <script.jsonl | ->        run commands, one {\"id\",\"params\"} per line (# comments ok), in
@@ -350,6 +354,7 @@ async fn cli() {
         "render" => cli_render(&a).await,
         "mcp" => cli_mcp(&a).await,
         "stream" => cli_stream(&a),
+        "live" => cli_live(&a),
         other => usage(format!("unknown subcommand `{other}`")),
     }
 }
@@ -822,6 +827,28 @@ mod format_tests {
         assert_eq!(super::format_for("out/clip.MXF"), Some("mxf-op1a"));
         assert_eq!(super::format_for("a.mov"), Some("prores"));
         assert_eq!(super::format_for("noext"), None);
+    }
+}
+
+/// `live`: FilmCraft's video effects from a live input to a live output (crates/stream, FFmpeg
+/// through craft-live), the input's audio carried alongside.
+fn cli_live(a: &Args) {
+    let need = |k: &str| -> String { a.opt(k).map(str::to_string).unwrap_or_else(|| usage(format!("live needs {k}"))) };
+    let num = |k: &str| a.opt(k).map(|v| v.parse::<f64>().unwrap_or_else(|_| usage(format!("{k}: a number"))));
+    let dim = |k: &str| -> u32 { need(k).parse().unwrap_or_else(|_| usage(format!("{k}: a whole number of pixels"))) };
+    let run = filmcraft_stream::LiveRun {
+        chain: need("--chain"),
+        input: need("--in"),
+        input_format: a.opt("--in-format").map(str::to_string),
+        output: need("--out"),
+        control: a.opt("--control").map(str::to_string),
+        config: filmcraft_stream::StreamConfig { width: dim("--width"), height: dim("--height"), fps: num("--fps").unwrap_or(30.0) },
+        seconds: num("--seconds").map_or(0, |s| s.max(0.0) as u32),
+        carry_audio: !a.flag("--no-audio"),
+        video_bitrate_kbps: num("--video-bitrate").map(|k| k.max(1.0) as u32),
+    };
+    if let Err(e) = filmcraft_stream::live(&run, &mut std::io::stderr()) {
+        fail(e);
     }
 }
 
