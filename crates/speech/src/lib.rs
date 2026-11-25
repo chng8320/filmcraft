@@ -1,37 +1,25 @@
-//! Speech-to-text for FilmCraft's Text panel ▸ Transcript.
-//!
-//! - [`Transcriber`]: the trait every speech recogniser implements. It takes mono 16 kHz samples
-//!   and returns a [`Transcript`] whose words carry media-time bounds (`Tick`s; one 16 kHz sample
-//!   is exactly 15 876 000 ticks).
-//! - [`models`]: the catalogue of downloadable Whisper models (source URL pinned to a revision,
-//!   SHA-256, size, licence), where they live in the per-user data directory, and (feature
-//!   `download`) the verified downloader. Weights are **never** bundled or committed.
-//! - [`whisper`] (feature `whisper`): Whisper inference in pure Rust on candle, with timestamp
-//!   decoding, language detection and word-level timestamps from cross-attention alignment (DTW).
-//! - [`diarize`]: speaker labelling by clustering per-chunk MFCC statistics (classical, no model).
-//! - [`mel`]: the log-mel front end shared by Whisper and diarization.
-//! - [`vad`]: energy-based tightening of word bounds (keeps pauses out of words).
+//! Speech-to-text for FilmCraft's Text panel ▸ Transcript, on craft-ai's speech to text
+//! (`craft_ai::speech` in craft-libs: Whisper on the CPU or a GPU, the model catalogue, endpoints,
+//! speaker labelling). This crate keeps FilmCraft's side: the [`Transcriber`] trait in FilmCraft's
+//! own types (`Tick`s; one 16 kHz sample is exactly 15 876 000 ticks) and the exact conversion
+//! from craft-ai's sample times.
 //!
 //! See `docs/transcripts.md` for the user-facing behaviour and accuracy numbers.
 
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable))]
 
-pub mod catalog;
-pub mod device;
-pub mod diarize;
-pub mod mel;
-pub mod models;
-#[cfg(feature = "download")]
-pub mod remote;
-pub mod vad;
-#[cfg(feature = "whisper")]
-pub mod whisper;
+use std::sync::Arc;
 
-use filmcraft_project::Transcript;
+use filmcraft_project::{Speaker, Transcript, Word};
 use filmcraft_time::{TICKS_PER_SECOND, Tick};
 
-/// The sample rate every transcriber takes.
-pub const SAMPLE_RATE: u32 = 16_000;
+pub use craft_ai::DeviceChoice;
+pub use craft_ai::speech::{Options, ProgressFn, SAMPLE_RATE, SpeechError, catalog, downmix, models, word_error_rate};
+
+/// The processors this build can use.
+pub mod device {
+    pub use craft_ai::compiled_backends;
+}
 
 /// Ticks per 16 kHz sample (exact).
 pub const TICKS_PER_SAMPLE: i64 = TICKS_PER_SECOND / SAMPLE_RATE as i64;
@@ -46,59 +34,49 @@ pub fn seconds_tick(s: f64) -> Tick {
     sample_tick((s * SAMPLE_RATE as f64).round() as i64)
 }
 
-#[derive(Debug, Clone, PartialEq, thiserror::Error)]
-pub enum SpeechError {
-    #[error("stopped")]
-    Cancelled,
-    #[error("the speech model `{0}` is not downloaded")]
-    NotInstalled(String),
-    #[error("unknown speech model `{0}`")]
-    UnknownModel(String),
-    #[error("speech-to-text is not available in this build ({0})")]
-    Unavailable(String),
-    #[error("model: {0}")]
-    Model(String),
-    #[error("download: {0}")]
-    Download(String),
-    #[error("{0}")]
-    Io(String),
-}
-
-impl From<std::io::Error> for SpeechError {
-    fn from(e: std::io::Error) -> Self {
-        SpeechError::Io(e.to_string())
-    }
-}
-
-/// Transcription options.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Options {
-    /// ISO 639-1 language code; `None` = detect from the first 30 s.
-    pub language: Option<String>,
-    /// Label speakers ([`diarize`]); otherwise every word gets speaker 0.
-    pub diarize: bool,
-    /// Upper bound for the number of speakers found.
-    pub max_speakers: usize,
-}
-
-impl Default for Options {
-    fn default() -> Self {
-        Self { language: None, diarize: true, max_speakers: 6 }
-    }
-}
-
-/// Progress callback: `(fraction 0..1, status)`; return `false` to cancel.
-pub type ProgressFn<'a> = &'a mut dyn FnMut(f32, &str) -> bool;
-
 /// A speech recogniser.
 pub trait Transcriber: Send + Sync {
     /// Stable id of the model (`"whisper-base"`), stored in the transcript's `source`.
     fn id(&self) -> String;
     /// Transcribe mono 16 kHz `audio`. Word times are relative to the first sample.
     fn transcribe(&self, audio: &[f32], opts: &Options, progress: ProgressFn) -> Result<Transcript, SpeechError>;
-    /// What the model runs on (`"CPU"`, `"NVIDIA GPU 0 (CUDA)"`), for results and the status line.
+    /// What the model runs on (`"CPU"`, `"NVIDIA GPU 0 (CUDA)"`, an endpoint).
     fn device(&self) -> String {
         "CPU".into()
+    }
+}
+
+/// A craft-ai transcript in FilmCraft's types: sample times become ticks exactly.
+pub fn to_project(t: craft_ai::speech::Transcript) -> Transcript {
+    Transcript {
+        language: t.language,
+        source: t.source,
+        speakers: t.speakers.into_iter().map(|s| Speaker { name: s.name }).collect(),
+        words: t
+            .words
+            .into_iter()
+            .map(|w| {
+                let mut x = Word::new(w.text, sample_tick(w.start.0), sample_tick(w.end.0));
+                x.speaker = w.speaker;
+                x.confidence = w.confidence;
+                x
+            })
+            .collect(),
+    }
+}
+
+/// A craft-ai transcriber behind FilmCraft's trait.
+struct Shared(Arc<dyn craft_ai::speech::Transcriber>);
+
+impl Transcriber for Shared {
+    fn id(&self) -> String {
+        self.0.id()
+    }
+    fn transcribe(&self, audio: &[f32], opts: &Options, progress: ProgressFn) -> Result<Transcript, SpeechError> {
+        self.0.transcribe(audio, opts, progress).map(to_project)
+    }
+    fn device(&self) -> String {
+        self.0.device()
     }
 }
 
@@ -126,113 +104,26 @@ impl Transcriber for FixedTranscriber {
     }
 }
 
-pub use device::DeviceChoice;
-
-/// Load the transcriber for catalogue model `id` from `models_dir` (feature `whisper`), on the
-/// processor `FILMCRAFT_DEVICE` names (default `auto`).
-pub fn load(models_dir: &std::path::Path, id: &str) -> Result<std::sync::Arc<dyn Transcriber>, SpeechError> {
-    load_on(models_dir, id, DeviceChoice::from_env())
-}
-
-/// Whether `id` is a speech model here: built in, or in a catalogue file under `models_dir`.
+/// Whether `id` is a speech model here: built in, or in a model catalogue file.
 pub fn known(models_dir: &std::path::Path, id: &str) -> bool {
-    models::find(id).is_some() || matches!(catalog::find(models_dir, id), Ok(Some(_)))
+    craft_ai::speech::known(models_dir, id)
 }
 
-/// Load speech model `id`: a catalogue file's entry (a Whisper folder or an endpoint) when one
-/// lists it, else the built-in model. The processor: `device`, else the catalogue entry's, else
-/// `FILMCRAFT_DEVICE`, else auto.
-pub fn load_with(models_dir: &std::path::Path, id: &str, device: Option<DeviceChoice>) -> Result<std::sync::Arc<dyn Transcriber>, SpeechError> {
-    let Some(m) = catalog::find(models_dir, id)? else {
-        return load_on(models_dir, id, device.unwrap_or_else(DeviceChoice::from_env));
-    };
-    let device = device.or(m.device).unwrap_or_else(DeviceChoice::from_env);
-    match m.source {
-        catalog::Source::Folder(dir) => {
-            #[cfg(feature = "whisper")]
-            {
-                Ok(std::sync::Arc::new(whisper::Whisper::load_on(&dir, &m.id, device)?))
-            }
-            #[cfg(not(feature = "whisper"))]
-            {
-                let _ = (dir, device);
-                Err(SpeechError::Unavailable("built without the `whisper` feature".into()))
-            }
-        }
-        catalog::Source::Endpoint { endpoint, model, token_env } => {
-            let _ = device; // the server's hardware
-            #[cfg(feature = "download")]
-            {
-                let token = std::env::var(&token_env).ok().filter(|t| !t.is_empty());
-                Ok(std::sync::Arc::new(remote::Remote { id: m.id, endpoint, model, token }))
-            }
-            #[cfg(not(feature = "download"))]
-            {
-                let _ = (endpoint, model, token_env);
-                Err(SpeechError::Unavailable("built without the `download` feature (no HTTP client)".into()))
-            }
-        }
-    }
+/// Load speech model `id` (craft-ai: a catalogue entry, else a built-in Whisper model in
+/// `models_dir`). The processor: `device`, else the catalogue entry's, else `CRAFT_AI_DEVICE`,
+/// else auto.
+pub fn load_with(models_dir: &std::path::Path, id: &str, device: Option<DeviceChoice>) -> Result<Arc<dyn Transcriber>, SpeechError> {
+    Ok(Arc::new(Shared(craft_ai::speech::load(models_dir, id, device)?)))
 }
 
-/// [`load`] on the processor `device` names (built-in models only).
-pub fn load_on(models_dir: &std::path::Path, id: &str, device: DeviceChoice) -> Result<std::sync::Arc<dyn Transcriber>, SpeechError> {
-    let m = models::find(id).ok_or_else(|| SpeechError::UnknownModel(id.into()))?;
-    if !models::installed(models_dir, m) {
-        return Err(SpeechError::NotInstalled(id.into()));
-    }
-    #[cfg(feature = "whisper")]
-    {
-        Ok(std::sync::Arc::new(whisper::Whisper::load_on(&models::model_dir(models_dir, m), m.id, device)?))
-    }
-    #[cfg(not(feature = "whisper"))]
-    {
-        let _ = device;
-        Err(SpeechError::Unavailable("built without the `whisper` feature".into()))
-    }
-}
-
-/// Whether this build can run speech models.
+/// Whether this build can run speech models here.
 pub const fn available() -> bool {
     cfg!(feature = "whisper")
-}
-
-/// Mix a multi-channel buffer down to mono.
-pub fn downmix(channels: &[Vec<f32>]) -> Vec<f32> {
-    let n = channels.iter().map(Vec::len).min().unwrap_or(0);
-    if channels.len() == 1 {
-        return channels[0][..n].to_vec();
-    }
-    let k = 1.0 / channels.len().max(1) as f32;
-    (0..n).map(|i| channels.iter().map(|c| c[i]).sum::<f32>() * k).collect()
-}
-
-/// Word error rate between a reference and a hypothesis (words compared case-insensitively
-/// without punctuation, hyphenated words split): (substitutions + deletions + insertions) / reference words.
-pub fn word_error_rate(reference: &str, hypothesis: &str) -> f64 {
-    let norm = |s: &str| -> Vec<String> {
-        s.split(|c: char| c.is_whitespace() || c == '-').map(filmcraft_project::transcript::normalize_word).filter(|w| !w.is_empty()).collect()
-    };
-    let (r, h) = (norm(reference), norm(hypothesis));
-    if r.is_empty() {
-        return if h.is_empty() { 0.0 } else { 1.0 };
-    }
-    let mut prev: Vec<usize> = (0..=h.len()).collect();
-    for i in 1..=r.len() {
-        let mut cur = vec![i; h.len() + 1];
-        for j in 1..=h.len() {
-            let sub = prev[j - 1] + usize::from(r[i - 1] != h[j - 1]);
-            cur[j] = sub.min(prev[j] + 1).min(cur[j - 1] + 1);
-        }
-        prev = cur;
-    }
-    prev[h.len()] as f64 / r.len() as f64
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use filmcraft_project::Word;
 
     #[test]
     fn sample_ticks_are_exact() {
@@ -241,10 +132,15 @@ mod tests {
     }
 
     #[test]
-    fn wer_counts_edits() {
-        assert_eq!(word_error_rate("the cat sat", "The cat, sat."), 0.0);
-        assert!((word_error_rate("the cat sat on the mat", "the cat sat on mat") - 1.0 / 6.0).abs() < 1e-9);
-        assert!((word_error_rate("a b", "a x b y") - 1.0).abs() < 1e-9);
+    fn craft_ai_times_become_the_same_instants_in_ticks() {
+        let mut t = craft_ai::speech::Transcript { language: "vi".into(), ..Default::default() };
+        let mut w = craft_ai::speech::Word::new("xin", craft_ai::speech::Samples(16_000), craft_ai::speech::Samples(24_000));
+        w.speaker = Some(0);
+        t.words.push(w);
+        t.normalize();
+        let p = to_project(t);
+        assert_eq!((p.words[0].start, p.words[0].end), (seconds_tick(1.0), seconds_tick(1.5)));
+        assert_eq!((p.words[0].speaker, p.speakers.len(), p.language.as_str()), (Some(0), 1, "vi"));
     }
 
     #[test]
@@ -257,10 +153,5 @@ mod tests {
         assert_eq!(out.words.len(), 1);
         assert_eq!(out.source, "fixed");
         assert_eq!(f.transcribe(&[], &Options::default(), &mut |_, _| false), Err(SpeechError::Cancelled));
-    }
-
-    #[test]
-    fn downmix_averages() {
-        assert_eq!(downmix(&[vec![1.0, 0.0], vec![0.0, 0.0, 9.0]]), vec![0.5, 0.0]);
     }
 }

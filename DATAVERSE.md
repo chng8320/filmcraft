@@ -47,3 +47,13 @@ Speech models beyond the built-in Whisper list come from catalogue files (`<FILM
 `dir` (a Whisper folder in the Hugging Face layout, run here on CPU or GPU) or `endpoint` + `remote_model`
 (any OpenAI-compatible `/audio/transcriptions` server; key from `token_env`, default
 `FILMCRAFT_SPEECH_TOKEN`). `transcript.models` lists them; `transcript.generate` takes their ids.
+
+## Speech to text now comes from craft-ai
+
+Whisper, the speech model catalogue, the device choice, endpoints and speaker labelling moved to craft-ai
+(`craft_ai::speech` in the Dataverse fork of craft-libs) so every engine shares them. `filmcraft-speech` is
+now FilmCraft's side only: the `Transcriber` trait in FilmCraft's types and the exact sample-to-tick conversion.
+The moved tests (Whisper end to end, diarization, word tightening, catalogue, endpoint) run in craft-libs.
+Settings are craft-ai's: `CRAFT_AI_DEVICE` (was `FILMCRAFT_DEVICE`), `CRAFT_AI_CATALOG` (was
+`FILMCRAFT_CATALOG`), `CRAFT_AI_TOKEN` for endpoints (was `FILMCRAFT_SPEECH_TOKEN`); models stay in
+`FILMCRAFT_MODELS`.

@@ -35,6 +35,9 @@ filmcraft-interchange = { path = "crates/interchange" }
 filmcraft-text = { path = "crates/text" }
 filmcraft-captions = { path = "crates/captions" }
 filmcraft-speech = { path = "crates/speech" }
+# Speech to text (and the device choice and model catalogue) from craft-ai in the Dataverse fork of craft-libs; its
+# dataverse-pins branch keeps this commit reachable.
+craft-ai = { git = "https://github.com/chng8320/craft-libs", rev = "e741685fb032d3a9a6a93a4d8cafacee0607dc79" }
 filmcraft-tts = { path = "crates/tts" }
 filmcraft-tts-text = { path = "crates/tts-text" }
 filmcraft-render = { path = "crates/render" }
