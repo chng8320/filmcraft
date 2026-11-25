@@ -30,9 +30,13 @@ fn spec(id: &'static str, label: &'static str, menu: &'static [&'static str], pa
     CommandSpec { id, label, menu, shortcut: None, params, enabled, run, journal, named: crate::commands::NamedKeys::NONE }
 }
 
-/// Where downloaded speech models live (`<data dir>/models`).
+/// Where downloaded speech and voice models live: `FILMCRAFT_MODELS` when set (a server or a
+/// container keeps them in one shared, read-only folder for every job), else `<data dir>/models`.
 pub fn models_dir() -> Option<std::path::PathBuf> {
-    crate::autosave::default_data_dir().map(|d| d.join("models"))
+    match std::env::var_os("FILMCRAFT_MODELS") {
+        Some(d) if !d.is_empty() => Some(std::path::PathBuf::from(d)),
+        _ => crate::autosave::default_data_dir().map(|d| d.join("models")),
+    }
 }
 
 /// Whether this build can transcribe with Whisper (feature `whisper`).

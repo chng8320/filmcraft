@@ -64,9 +64,9 @@ jobs:
       - name: System libraries the build needs (as upstream's CI)
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libxcursor-dev libxrandr-dev libxi-dev libfontconfig1-dev libfreetype-dev mesa-vulkan-drivers libasound2-dev libvulkan1
       - name: Build the command line
-        run: cargo build --release -p filmcraft-cli
+        run: cargo build --release -p filmcraft-cli --features whisper,neural-voices
       - name: Test it
-        run: cargo test --release -p filmcraft-cli --test it
+        run: cargo test --release -p filmcraft-cli --features whisper,neural-voices --test it
       - name: Name it for the Dataverse
         run: |
           mkdir -p out
